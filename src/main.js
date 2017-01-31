@@ -139,7 +139,7 @@ function onLoad(framework) {
 
     // set skybox
     var loader = new THREE.CubeTextureLoader();
-    var urlPrefix = '/images/skymap/';
+    var urlPrefix = 'images/skymap/';
 
     var skymap = new THREE.CubeTextureLoader().load([
         urlPrefix + 'px.jpg', urlPrefix + 'nx.jpg',
@@ -154,7 +154,7 @@ function onLoad(framework) {
     wing.name = "wing";
     // load a simple obj mesh
     var objLoader = new THREE.OBJLoader();
-    objLoader.load('/geo/feather.obj', function(obj) {
+    objLoader.load('geo/feather.obj', function(obj) {
 
         // LOOK: This function runs after the obj has finished loading
 
