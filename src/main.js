@@ -4,6 +4,32 @@
 const THREE = require('three'); // older modules are imported like this. You shouldn't have to worry about this much
 import Framework from './framework'
 
+var wing;
+var feathers = [];
+var params = {numFeathers: 20.0,
+              featherDist: 0.25,
+              featherCurvature: 0.5,
+              featherSize: 1.0,
+              wind: new THREE.Vector3(0,0,1.0),
+              windSpeed: 1.0};
+var time = 0.0;
+var featherMesh;
+
+function createFeathers(){
+    create_top_layer(featherMesh, params.featherDist, params.numFeathers, 0.0, 
+                    params.featherCurvature, params.featherSize);
+    var featherDist = params.featherDist/2.0 + params.featherDist;
+    var numFeathers = params.numFeathers - params.numFeathers/4.0;
+    create_bottom_layer(featherMesh, featherDist, 0, numFeathers, 0.0, params.featherCurvature,
+        params.featherSize);
+}
+
+function removeFeathers(){
+for( var i = wing.children.length - 1; i >= 0; i--) { 
+    wing.remove(wing.children[i]);
+}
+
+}
 
 function easeLinear(t, start, end, duration){
     return end * (t/duration) + start;
@@ -15,28 +41,41 @@ function ease_in_quadratic(t, start, end, duration){
     return t * (end - start) + start
 }
 
-function create_top_layer(wing, mesh, featherDist, numFeathers, steepness){
+function impulse(k,x){
+    var h = k*x;
+    return h * Math.exp(1.0 - h);
+}
+
+function wingProfile(t, decay){
+    return impulse(decay,t);
+}
+
+function create_top_layer(mesh, featherDist, numFeathers, steepness, featherCurvature, featherSize){
      for (var i = 0; i < featherDist*numFeathers; i+=featherDist){
         var featherMeshClone = mesh.clone();
         var duration = featherDist*numFeathers;
         var z_pos = ease_in_quadratic(i, 0, 1, duration);
-        featherMeshClone.position.set(i, 0, -z_pos);
+        var y_pos = wingProfile(i, featherCurvature);
+        featherMeshClone.position.set(i, y_pos, -z_pos);
+        featherMeshClone.scale.set(featherSize,1,featherSize);
         var rot = easeLinear(i, 0.0, -90.0, duration);
-        featherMeshClone.rotateY((Math.PI/180.0) *rot)
-        wing.add(featherMeshClone);  
+        featherMeshClone.rotateY((Math.PI/180.0) *rot);
+        wing.add(featherMeshClone);
+        feathers.push(featherMeshClone);
     }
 }
 
-function create_bottom_layer(wing, mesh, featherDist, offset, numFeathers, steepness){
+function create_bottom_layer(mesh, featherDist, offset, numFeathers, steepness, featherCurvature, featherSize){
      for (var i = 0; i < featherDist*numFeathers; i+=featherDist){
         var featherMeshClone = mesh.clone();
         var duration = featherDist*numFeathers;
         var z_pos = ease_in_quadratic(i, 0, 1, duration);
-        featherMeshClone.position.set(i, -0.1, -z_pos + offset);
-        featherMeshClone.scale.set(1.5,1,2);
+        var y_pos = wingProfile(i, featherCurvature);
+        featherMeshClone.position.set(i, y_pos -0.1, -z_pos + offset);
+        featherMeshClone.scale.set(1.5 * featherSize,1,2 * featherSize);
         var rot = easeLinear(i, 0.0, -90.0, duration);
-        featherMeshClone.rotateY((Math.PI/180.0) *rot)
-        wing.add(featherMeshClone);  
+        featherMeshClone.rotateY((Math.PI/180.0) *rot);
+        wing.add(featherMeshClone); 
     }
 }
 
@@ -50,7 +89,11 @@ function onLoad(framework) {
 
     // Basic Lambert white
     var lambertWhite = new THREE.MeshLambertMaterial({ color: 0xaaaaaa, side: THREE.DoubleSide });
-
+    var wingMat = new THREE.MeshPhongMaterial( { 
+    color: 0x2956B2, 
+    specular: 0xaaaaaa,
+    shininess: 6
+    } ); 
     // Set light
     var directionalLight = new THREE.DirectionalLight( 0xffffff, 1 );
     directionalLight.color.setHSL(0.1, 1, 0.95);
@@ -70,7 +113,7 @@ function onLoad(framework) {
     scene.background = skymap;
 
     //parent wing object
-    var wing = new THREE.Object3D();
+    wing = new THREE.Object3D();
     wing.name = "wing";
     // load a simple obj mesh
     var objLoader = new THREE.OBJLoader();
@@ -79,20 +122,13 @@ function onLoad(framework) {
         // LOOK: This function runs after the obj has finished loading
 
         var featherGeo = obj.children[0].geometry;
-        var featherMesh = new THREE.Mesh(featherGeo, lambertWhite);
+        featherMesh = new THREE.Mesh(featherGeo, wingMat);
         featherMesh.rotation.y = Math.PI / 2;
         featherMesh.rotation.z = Math.PI;
 
         wing.add(featherMesh);
         featherMesh.name = "feather";
-        var featherDist = 0.25;
-        var numFeathers = 20.0;
-        var steepness = 15.0; //lower is steeper
-        create_top_layer(wing, featherMesh, featherDist, numFeathers, steepness);
-        featherDist = 0.35;
-        numFeathers = 15.0;
-        steepness = 12.0; //lower is steeper
-        create_bottom_layer(wing, featherMesh, featherDist, 0, numFeathers, steepness);
+        createFeathers();
 
     });
     scene.add(wing);
@@ -109,6 +145,35 @@ function onLoad(framework) {
     gui.add(camera, 'fov', 0, 180).onChange(function(newVal) {
         camera.updateProjectionMatrix();
     });
+
+    gui.add(params, 'numFeathers', 15, 35).onChange(function(newVal) {
+        removeFeathers();
+        createFeathers();
+    });
+
+    gui.add(params, 'featherDist', 0.1, 0.5).onChange(function(newVal) {
+        removeFeathers();
+        createFeathers();
+    });
+
+    gui.add(params, 'featherCurvature', 0, 1.0).onChange(function(newVal) {
+        removeFeathers();
+        createFeathers();
+    });
+
+    gui.add(params, 'featherSize', 0.5, 3.0).onChange(function(newVal) {
+        removeFeathers();
+        createFeathers();
+    });
+
+    gui.add(params, 'windSpeed', 0, 10.0).onChange(function(newVal) {
+        removeFeathers();
+        createFeathers();
+    });
+}
+
+function animateWind(){
+    
 }
 
 // called on frame updates
@@ -117,7 +182,8 @@ function onUpdate(framework) {
     if (wing !== undefined) {
         // Simply flap wing
         var date = new Date();
-        wing.rotateX(Math.sin(date.getTime() / 100) * 2 * Math.PI / 180);        
+        time = date.getTime();
+        //wing.rotateZ(Math.sin(date.getTime() / 100) * 2 * Math.PI / 180);        
     }
 }
 
